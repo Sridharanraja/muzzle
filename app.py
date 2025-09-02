@@ -103,7 +103,7 @@ if uploaded_file is not None:
     if confidence < 0.90:
         st.error(
             f"⚠️ Data not available in DB for reliable classification.\n\n"
-            f"But it looks **similar to: {class_name}** (Confidence: {confidence:.2f})"
+            # f"But it looks **similar to: {class_name}** (Confidence: {confidence:.2f})"
         )
     else:
         # --- Normal case, but also respect UI slider ---
