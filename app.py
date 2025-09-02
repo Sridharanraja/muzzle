@@ -5,7 +5,7 @@ from ultralytics import YOLO
 # Load YOLOv11 classification model
 model = YOLO("./models/best_25.pt")
 
-st.title("Muzzle Classification")
+st.title("Muzzle Identification")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
