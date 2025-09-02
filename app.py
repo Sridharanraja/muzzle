@@ -25,4 +25,4 @@ if uploaded_file is not None:
     class_name = model.names[class_id]
 
     # Display result
-    st.success(f"Predicted Class: **{class_name}** (Confidence: {confidence:.2f})")
+    st.success(f"Predicted Class: **{class_name}**") #(Confidence: {confidence:.2f})
