@@ -3,10 +3,9 @@ from PIL import Image
 from ultralytics import YOLO
 
 # Load YOLOv11 classification model
-# Replace 'yolo11-cls.pt' with your trained weights file
-model = YOLO("models/best.pt")
+model = YOLO("./models/best_25.pt")
 
-st.title("YOLOv11 Image Classification App")
+st.title("Muzzle Classification")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
