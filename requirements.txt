@@ -1,4 +1,5 @@
 streamlit
-opencv-python-headless
 ultralytics
-
+torch
+pandas==2.2.2
+numpy==1.26.4
