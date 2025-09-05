@@ -95,41 +95,41 @@ if uploaded_file is not None:
 # -----------------------
 st.subheader("➕ Register New Cattle")
 
-def generate_unique_id():
-    """Generate a unique 12-digit ID"""
-    return str(random.randint(100000000000, 999999999999))
+with st.form("register_form", clear_on_submit=True):
+    cattle_id = st.text_input("Enter 12-digit Cattle ID (numbers only)")
+    cattle_name = st.text_input("Enter Cattle Name")
+    images = st.file_uploader(
+        "Upload at least 4 images", 
+        type=["jpg", "jpeg", "png"], 
+        accept_multiple_files=True
+    )
+    submitted = st.form_submit_button("Submit")
 
-if st.button("Register New Cattle"):
-    with st.form("register_form", clear_on_submit=True):
-        cattle_name = st.text_input("Enter Cattle Name")
-        images = st.file_uploader(
-            "Upload at least 4 images", type=["jpg", "jpeg", "png"], accept_multiple_files=True
-        )
-        submitted = st.form_submit_button("Submit")
+    if submitted:
+        # --- Validation ---
+        if not cattle_id:
+            st.error("⚠️ Please enter a 12-digit ID.")
+        elif not cattle_id.isdigit() or len(cattle_id) != 12:
+            st.error("⚠️ ID must be exactly 12 numeric digits.")
+        elif cattle_collection.find_one({"12_digit_id": cattle_id}):
+            st.error("⚠️ This ID already exists. Please use a unique one.")
+        elif not cattle_name:
+            st.error("⚠️ Please enter a cattle name.")
+        elif len(images) < 4:
+            st.error("⚠️ Please upload at least 4 images.")
+        else:
+            # --- Save ---
+            image_list = [base64.b64encode(file.read()).decode("utf-8") for file in images]
 
-        if submitted:
-            if not cattle_name:
-                st.error("⚠️ Please enter a cattle name.")
-            elif len(images) < 4:
-                st.error("⚠️ Please upload at least 4 images.")
-            else:
-                # Generate ID
-                cattle_id = generate_unique_id()
+            cattle_collection.insert_one({
+                "12_digit_id": cattle_id,
+                "cattle_name": cattle_name,
+                "images": image_list,
+                "created_at": datetime.utcnow().isoformat()
+            })
 
-                # Save images to MongoDB
-                image_list = []
-                for file in images:
-                    file_bytes = file.read()
-                    image_list.append(base64.b64encode(file_bytes).decode("utf-8"))
+            st.success(f"✅ Registered {cattle_name} with ID {cattle_id}")
 
-                cattle_collection.insert_one({
-                    "12_digit_id": cattle_id,
-                    "cattle_name": cattle_name,
-                    "images": image_list
-                })
-
-                st.success(f"✅ Registered {cattle_name} with ID {cattle_id}")
-
-                # Show uploaded images
-                for img_data in image_list:
-                    st.image(Image.open(io.BytesIO(base64.b64decode(img_data))), use_column_width=True)
+            # Show previews
+            for img_data in image_list:
+                st.image(Image.open(io.BytesIO(base64.b64decode(img_data))), use_container_width=True)
