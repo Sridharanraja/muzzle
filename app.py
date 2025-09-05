@@ -22,12 +22,26 @@ cattle_collection = db["cattle_images"]
 # -----------------------
 @st.cache_data
 def load_csv():
-    df = pd.read_csv("./file/data.csv", dtype={"12_digit_id": str})
-    # Ensure IDs are exactly digits, no scientific notation
-    df["12_digit_id"] = df["12_digit_id"].str.replace(r"\.0$", "", regex=True)  # remove trailing .0
-    df["12_digit_id"] = df["12_digit_id"].str.replace(",", "", regex=True)      # remove commas
-    df["12_digit_id"] = df["12_digit_id"].apply(lambda x: str(int(float(x))) if x.replace('.', '', 1).isdigit() else x)
+    df = pd.read_csv("./file/data.csv", dtype=str)
+
+    # Clean up the 12_digit_id column
+    df["12_digit_id"] = (
+        df["12_digit_id"]
+        .str.replace(r"\.0$", "", regex=True)   # remove trailing .0 if present
+        .str.replace(",", "", regex=True)       # remove commas
+    )
+
+    # Convert scientific notation like 7.78268E+11 → 778268000000
+    def fix_id(x):
+        try:
+            return str(int(float(x)))
+        except:
+            return x
+
+    df["12_digit_id"] = df["12_digit_id"].apply(fix_id)
+
     return df
+
 
 
 
