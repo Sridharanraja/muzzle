@@ -22,7 +22,13 @@ cattle_collection = db["cattle_images"]
 # -----------------------
 @st.cache_data
 def load_csv():
-    return pd.read_csv("./file/data.csv", dtype={"12_digit_id": str})
+    df = pd.read_csv("./file/data.csv", dtype={"12_digit_id": str})
+    # Ensure IDs are exactly digits, no scientific notation
+    df["12_digit_id"] = df["12_digit_id"].str.replace(r"\.0$", "", regex=True)  # remove trailing .0
+    df["12_digit_id"] = df["12_digit_id"].str.replace(",", "", regex=True)      # remove commas
+    df["12_digit_id"] = df["12_digit_id"].apply(lambda x: str(int(float(x))) if x.replace('.', '', 1).isdigit() else x)
+    return df
+
 
 
 cattle_df = load_csv()
