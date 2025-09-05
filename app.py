@@ -22,7 +22,7 @@ cattle_collection = db["cattle_images"]
 # -----------------------
 @st.cache_data
 def load_csv():
-    return pd.read_csv("data.csv")  # Ensure this file is in your repo
+    return pd.read_csv("./file/data.csv")  # Ensure this file is in your repo
 
 cattle_df = load_csv()
 
