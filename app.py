@@ -555,10 +555,10 @@ with tabs[0]:
                 st.success(f"Predicted Class: **{class_name}** (Confidence: {confidence:.2f})")
                 row = cattle_df[cattle_df["class"] == class_name]
                 if not row.empty:
-                    st.write("📌 **Mapped Result from CSV:**")
+                    st.write("📌 **The details of the Cow Identified are as below:**")
                     st.table(row[["12_digit_id", "cattle_name", "class"]])
                 else:
-                    st.warning("⚠️ Predicted class not found in CSV mapping.")
+                    st.warning("⚠️ Predicted class not found in Database.")
             else:
                 st.warning("No prediction passed the selected confidence threshold.")
 
@@ -582,8 +582,8 @@ with tabs[1]:
                 st.error("⚠️ This ID already exists.")
             elif not cattle_name:
                 st.error("⚠️ Please enter a cattle name.")
-            elif not images or len(images) < 4:
-                st.error("⚠️ Please upload at least 4 images.")
+            elif not images or len(images) < 1:
+                st.error("⚠️ Please upload at least 1 images.")
             else:
                 try:
                     doc = save_new_cattle(cattle_id, cattle_name, images)
