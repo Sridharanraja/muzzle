@@ -1,2 +1,5 @@
 streamlit
 ultralytics
+pillow
+pymongo
+pandas
