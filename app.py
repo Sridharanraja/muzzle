@@ -526,7 +526,7 @@ def create_images_zip_bytes(docs):
 # -----------------------
 # UI Layout
 # -----------------------
-st.title("🐄 YOLOv11 Cattle App")
+st.title("🐄 Livestock Management")
 
 tabs = st.tabs(["🔍 Classification", "➕ Register Cattle", "📂 Browse & Download", "🔎 Quick Lookup"])
 
