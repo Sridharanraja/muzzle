@@ -421,17 +421,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cattle_app")
 
 # -----------------------------------------------------------------------------
-# Helpers: image resizing / thumbnailing (keeps DB small)
+# Helpers: image resizing / thumbnailing
 # -----------------------------------------------------------------------------
 def resize_image_bytes(raw_bytes: bytes, max_size: int = 1024, quality: int = 85) -> bytes:
-    """Resize image if it is larger than max_size and return JPEG bytes."""
     img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
     w, h = img.size
     max_wh = max(w, h)
     if max_wh > max_size:
         scale = max_size / max_wh
-        new_size = (int(w * scale), int(h * scale))
-        img = img.resize(new_size, Image.LANCZOS)
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=quality)
     return buf.getvalue()
@@ -450,47 +448,40 @@ def from_b64(b64str: str) -> bytes:
     return base64.b64decode(b64str)
 
 # -----------------------------------------------------------------------------
-# DB connection (require st.secrets["mongodb"]["uri"])
+# DB connection
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def get_db():
     uri = st.secrets.get("mongodb", {}).get("uri")
     if not uri:
-        raise RuntimeError("MongoDB URI not found in st.secrets['mongodb']['uri']. Add it in Streamlit Secrets.")
+        raise RuntimeError("MongoDB URI not found in st.secrets['mongodb']['uri']")
     client = MongoClient(uri, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
-    # test connection
     client.admin.command("ping")
     db = client["cattle_db"]
-    # ensure indexes
     db["cattle_images"].create_index([("12_digit_id", ASCENDING)], unique=True)
     db["cattle_images"].create_index([("class", ASCENDING)])
     return db
 
-# Try connecting early so errors show to user
 try:
     db = get_db()
     cattle_collection = db["cattle_images"]
 except Exception as e:
-    st.error("Cannot connect to MongoDB. Check st.secrets and network access (Atlas IP rules).")
+    st.error("Cannot connect to MongoDB.")
     st.exception(e)
     st.stop()
 
 # -----------------------------------------------------------------------------
-# Load CSV mapping (data.csv) and clean IDs
+# Load CSV mapping (data.csv)
 # -----------------------------------------------------------------------------
 @st.cache_data
 def load_csv(path="./file/data.csv"):
     df = pd.read_csv(path, dtype=str)
-    # cleanup id field (remove commas/trailing .0, convert scientific notation)
     df["12_digit_id"] = df["12_digit_id"].fillna("").astype(str)
     df["12_digit_id"] = df["12_digit_id"].str.replace(r"\.0$", "", regex=True).str.replace(",", "", regex=True)
     def _fix(x):
-        try:
-            return str(int(float(x)))
-        except:
-            return x
+        try: return str(int(float(x)))
+        except: return x
     df["12_digit_id"] = df["12_digit_id"].apply(_fix)
-    # ensure class and name exist
     if "class" not in df.columns or "cattle_name" not in df.columns:
         raise RuntimeError("data.csv must contain columns: 12_digit_id,cattle_name,class")
     return df
@@ -498,38 +489,33 @@ def load_csv(path="./file/data.csv"):
 try:
     cattle_df = load_csv()
 except Exception as e:
-    st.error("Failed to load ./file/data.csv. Make sure it exists in repo and has columns 12_digit_id,cattle_name,class.")
+    st.error("Failed to load ./file/data.csv")
     st.exception(e)
     st.stop()
 
 # -----------------------------------------------------------------------------
-# YOLO model load (cached)
+# YOLO model load
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def load_model(weights_path="./models/best_25.pt"):
-    try:
-        model = YOLO(weights_path)
-        return model
-    except Exception as e:
-        raise RuntimeError(f"Failed to load YOLO weights at {weights_path}: {e}")
+    model = YOLO(weights_path)
+    return model
 
 try:
     model = load_model()
 except Exception as e:
-    st.error("YOLO model load failed. Please ensure weights file is in ./models/best_25.pt (or update path).")
+    st.error("YOLO model load failed")
     st.exception(e)
     st.stop()
 
 # -----------------------------------------------------------------------------
-# DB helpers: save, get, list
+# DB helpers
 # -----------------------------------------------------------------------------
 def save_new_cattle(cattle_id: str, cattle_name: str, cattle_class: str, image_files):
-    """Save a new cattle doc. image_files: list of UploadedFile"""
     created_at = datetime.utcnow().isoformat()
     image_entries = []
     for idx, f in enumerate(image_files, start=1):
         raw = f.read()
-        # resize and thumbnail to limit size
         resized = resize_image_bytes(raw, max_size=1024)
         thumb = create_thumbnail_bytes(resized, thumb_size=256)
         ext = os.path.splitext(f.name)[1] or ".jpg"
@@ -564,9 +550,6 @@ def list_cattle(filter_id=None, filter_name=None, limit=100):
     cursor = cattle_collection.find(q).sort("created_at", -1).limit(limit)
     return list(cursor)
 
-# -----------------------------------------------------------------------------
-# Export helpers
-# -----------------------------------------------------------------------------
 def create_metadata_csv_bytes(docs):
     rows = []
     for d in docs:
@@ -593,114 +576,94 @@ def create_images_zip_bytes(docs):
             for img in d.get("images", []):
                 filename = img.get("filename")
                 raw = from_b64(img.get("b64"))
-                # Put files inside folder named by cattle id
                 z.writestr(f"{d['12_digit_id']}/{filename}", raw)
     buf.seek(0)
     return buf.read()
 
 # -----------------------------------------------------------------------------
-# UI - Title and sidebar (class list from model)
+# UI: Title & Sidebar
 # -----------------------------------------------------------------------------
 st.title("🐄 Cattle YOLOv11 Classification & Management")
 st.sidebar.header("App Controls")
-ui_threshold = st.sidebar.slider("Confidence Threshold (UI)", 0.0, 1.0, 0.5, 0.01)
-
-# provide class list for registration dropdown (model.names may be dict {id:name})
+ui_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.01)
 yolo_class_list = list(model.names.values()) if hasattr(model, "names") else []
 
 # -----------------------------------------------------------------------------
-# UI: Prediction section
+# UI: Predict & Map
 # -----------------------------------------------------------------------------
 st.header("🔍 Predict & Map (Upload Image)")
-
 col1, col2 = st.columns([1,1])
 with col1:
     uploaded_file = st.file_uploader("Upload an image for prediction", type=["jpg","jpeg","png"], key="predict_upload")
 with col2:
     st.markdown("**Options**")
-    st.write("Confidence threshold for displaying mapping:")
-    st.write(f"- UI threshold: {ui_threshold:.2f}")
-    st.write("- System requires >= 0.90 confidence for 'DB mapping' reliability.")
+    st.write(f"UI threshold: {ui_threshold:.2f}")
+    st.write("System requires >= 0.90 confidence for DB mapping reliability.")
 
 if uploaded_file is not None:
     try:
         pil_img = Image.open(uploaded_file).convert("RGB")
         st.image(pil_img, caption="Uploaded image", use_column_width=True)
-
-        # Convert to numpy for YOLO predict where needed
         img_np = np.array(pil_img)
 
         with st.spinner("Running YOLO prediction..."):
-            results = model.predict(img_np, imgsz=640)  # imgsz optional
-        # Access classification results
+            results = model.predict(img_np, imgsz=640)
         if len(results) == 0:
             st.error("No results from YOLO.")
         else:
             probs = results[0].probs
-            # top1 may be str index or int; follow previous pattern
             try:
                 class_id = int(probs.top1)
             except Exception:
-                # fallback: take argmax
                 class_id = int(np.argmax(probs.p))
             confidence = float(probs.top1conf)
             class_name = model.names[class_id]
-
             st.write(f"**Predicted class:** `{class_name}`  — confidence: {confidence:.3f}")
 
             if confidence < 0.90:
-                st.warning("⚠️ Confidence < 0.90. Mapping results will be shown but treat as low-confidence.")
+                st.warning("⚠️ Confidence < 0.90. Mapping may be unreliable.")
             if confidence < ui_threshold:
-                st.warning("Prediction did not pass the UI threshold you set; results are suppressed by threshold.")
+                st.warning("Prediction below UI threshold; results suppressed.")
             else:
-                # 1) CSV mapping
+                # CSV mapping
                 csv_hits = cattle_df[cattle_df["class"] == class_name]
                 if not csv_hits.empty:
                     st.subheader("🔗 Mapped results from CSV")
-                    # ensure id column printed as string
                     csv_hits = csv_hits.copy()
                     csv_hits["12_digit_id"] = csv_hits["12_digit_id"].astype(str)
                     st.table(csv_hits[["12_digit_id","cattle_name","class"]].head(10))
                 else:
                     st.info("No mapping found in CSV for this class.")
 
-                # 2) MongoDB mapping (exact class match)
-                mongo_hits = list(cattle_collection.find({"class": class_name}).sort("created_at", -1).limit(50))
+                # MongoDB mapping
+                mongo_hits = list(cattle_collection.find({"class": class_name}).sort("created_at",-1).limit(50))
                 if mongo_hits:
                     st.subheader("🐮 Registered cattle from MongoDB (exact class match)")
                     for doc in mongo_hits:
                         cols = st.columns([1,3,2,2])
                         with cols[0]:
-                            # show thumbnail if present
                             if doc.get("images") and doc["images"][0].get("thumbnail_b64"):
                                 thumb = from_b64(doc["images"][0]["thumbnail_b64"])
                                 st.image(Image.open(io.BytesIO(thumb)), width=140)
-                            else:
-                                st.write("No image")
                         with cols[1]:
                             st.markdown(f"**{doc['cattle_name']}**")
                             st.write(f"ID: `{doc['12_digit_id']}`")
                             st.write(f"Created: {doc.get('created_at')}")
                         with cols[2]:
-                            st.write(f"Class: `{doc.get('class', 'N/A')}`")
+                            st.write(f"Class: `{doc.get('class','N/A')}`")
                         with cols[3]:
-                            # quick actions
                             if st.button(f"View {doc['12_digit_id']}", key=f"view_{doc['12_digit_id']}"):
-                                st.experimental_rerun()  # simple way to refresh (user can lookup via quick lookup section)
-                else:
-                    st.info("No registered cattle in DB with this class.")
+                                st.experimental_rerun()
 
-                # Option: offer to register new cattle with this predicted class pre-selected
                 st.markdown("---")
                 if st.checkbox("Register a new cattle using this predicted class (prefill)"):
                     with st.form("register_from_prediction", clear_on_submit=False):
-                        new_id = st.text_input("12-digit ID (numbers only)")
+                        new_id = st.text_input("12-digit ID")
                         new_name = st.text_input("Cattle name")
                         new_class = st.selectbox("Class", options=yolo_class_list, index=yolo_class_list.index(class_name) if class_name in yolo_class_list else 0)
                         new_images = st.file_uploader("Upload at least 4 images", type=["jpg","jpeg","png"], accept_multiple_files=True, key="reg_from_pred")
                         submitted = st.form_submit_button("Register from prediction")
                         if submitted:
-                            # validations
                             if not new_id or not new_id.isdigit() or len(new_id) != 12:
                                 st.error("ID must be exactly 12 numeric digits.")
                             elif cattle_collection.find_one({"12_digit_id": new_id}):
@@ -710,143 +673,91 @@ if uploaded_file is not None:
                             elif not new_images or len(new_images) < 4:
                                 st.error("Upload at least 4 images.")
                             else:
-                                try:
-                                    doc = save_new_cattle(new_id, new_name, new_class, new_images)
-                                except Exception as e:
-                                    st.error(f"DB save error: {e}")
-                                else:
-                                    st.success(f"Registered {new_name} ({new_id}) with class {new_class}")
-                                    # show previews
-                                    for img in doc["images"]:
-                                        st.image(Image.open(io.BytesIO(from_b64(img["b64"]))), caption=img["filename"], use_column_width=True)
+                                doc = save_new_cattle(new_id, new_name, new_class, new_images)
+                                st.success(f"Registered {new_name} ({new_id}) with class {new_class}")
+                                for img in doc["images"]:
+                                    st.image(Image.open(io.BytesIO(from_b64(img["b64"]))), caption=img["filename"], use_column_width=True)
 
     except Exception as e:
         st.error("Error during prediction flow.")
         st.exception(e)
 
 # -----------------------------------------------------------------------------
-# UI: Register page (manual) - main register form
+# UI: Manual Registration
 # -----------------------------------------------------------------------------
 st.header("➕ Register New Cattle (Manual)")
-
 with st.form("register_form_main", clear_on_submit=True):
     r_cattle_id = st.text_input("Enter 12-digit Cattle ID (numbers only)")
     r_cattle_name = st.text_input("Enter Cattle Name")
-    # let user select class from model classes or free text fallback
     if yolo_class_list:
         r_cattle_class = st.selectbox("Class (choose from YOLO classes)", ["--select--"] + yolo_class_list)
         if r_cattle_class == "--select--":
             r_cattle_class = st.text_input("Or enter class manually")
     else:
         r_cattle_class = st.text_input("Enter class")
-
     r_images = st.file_uploader("Upload at least 4 images", type=["jpg","jpeg","png"], accept_multiple_files=True, key="reg_main")
     submitted = st.form_submit_button("Submit Registration")
-
     if submitted:
         try:
-            if not r_cattle_id or not r_cattle_id.isdigit() or len(r_cattle_id) != 12:
-                st.error("ID must be exactly 12 numeric digits.")
-            elif cattle_collection.find_one({"12_digit_id": r_cattle_id}):
-                st.error("This ID already exists.")
-            elif not r_cattle_name:
-                st.error("Enter cattle name.")
-            elif not r_cattle_class:
-                st.error("Enter/select class.")
-            elif not r_images or len(r_images) < 4:
-                st.error("Upload at least 4 images.")
-            else:
-                doc = save_new_cattle(r_cattle_id, r_cattle_name, r_cattle_class, r_images)
-                st.success(f"✅ Registered {r_cattle_name} with ID {r_cattle_id}")
-                st.write(f"- ID: `{doc['12_digit_id']}`")
-                st.write(f"- Name: {doc['cattle_name']}")
-                st.write(f"- Class: {doc.get('class')}")
-                st.write(f"- Created: {doc['created_at']}")
-                for img in doc["images"]:
-                    st.image(Image.open(io.BytesIO(from_b64(img["b64"]))), caption=img["filename"], use_column_width=True)
-
-                # immediate downloads
-                st.download_button("⬇️ Download metadata CSV (this cattle)", data=create_metadata_csv_bytes([doc]),
-                                   file_name=f"{r_cattle_id}_metadata.csv", mime="text/csv")
-                st.download_button("⬇️ Download images ZIP (this cattle)", data=create_images_zip_bytes([doc]),
-                                   file_name=f"{r_cattle_id}_images.zip", mime="application/zip")
+            doc = save_new_cattle(r_cattle_id, r_cattle_name, r_cattle_class, r_images)
+            st.success(f"✅ Registered {r_cattle_name} with ID {r_cattle_id}")
+            st.write(f"- ID: `{doc['12_digit_id']}`")
+            st.write(f"- Name: {doc['cattle_name']}")
+            st.write(f"- Class: {doc.get('class')}")
+            st.write(f"- Created: {doc['created_at']}")
+            for img in doc["images"]:
+                st.image(Image.open(io.BytesIO(from_b64(img["b64"]))), caption=img["filename"], use_column_width=True)
+            st.download_button("⬇️ Download metadata CSV (this cattle)", data=create_metadata_csv_bytes([doc]),
+                               file_name=f"{r_cattle_id}_metadata.csv", mime="text/csv")
+            st.download_button("⬇️ Download images ZIP (this cattle)", data=create_images_zip_bytes([doc]),
+                               file_name=f"{r_cattle_id}_images.zip", mime="application/zip")
         except Exception as e:
             st.error("Error during registration.")
             st.exception(e)
 
 # -----------------------------------------------------------------------------
-# UI: Browse / Filter / Download (Admin)
+# UI: Browse / Filter / Download
 # -----------------------------------------------------------------------------
 st.header("📂 Browse & Download Registered Cattle")
 c_col1, c_col2, c_col3 = st.columns([3,3,2])
-with c_col1:
-    q_id = st.text_input("Filter by ID (partial/full)", key="filter_id")
-with c_col2:
-    q_name = st.text_input("Filter by name (partial)", key="filter_name")
-with c_col3:
-    q_limit = st.number_input("Limit", min_value=1, max_value=500, value=50, step=1, key="limit")
+with c_col1: q_id = st.text_input("Filter by ID (partial/full)", key="filter_id")
+with c_col2: q_name = st.text_input("Filter by name (partial)", key="filter_name")
+with c_col3: q_limit = st.number_input("Limit", min_value=1, max_value=500, value=50, step=1, key="limit")
 
 if st.button("Search DB"):
-    try:
-        docs = list_cattle(filter_id=q_id.strip() or None, filter_name=q_name.strip() or None, limit=int(q_limit))
-        if not docs:
-            st.info("No matching records.")
-        else:
-            st.write(f"Found {len(docs)} records (showing up to {q_limit}).")
-            rows = []
-            for d in docs:
-                rows.append({
-                    "12_digit_id": d.get("12_digit_id"),
-                    "cattle_name": d.get("cattle_name"),
-                    "class": d.get("class"),
-                    "created_at": d.get("created_at"),
-                    "n_images": len(d.get("images", []))
-                })
-            st.dataframe(pd.DataFrame(rows))
-            ids = [d["12_digit_id"] for d in docs]
-            selected = st.multiselect("Select IDs to download (leave empty = all shown)", options=ids)
-            if selected:
-                download_docs = [get_cattle_by_id(s) for s in selected]
-            else:
-                download_docs = docs
-
-            if st.button("Prepare Download"):
-                csv_bytes = create_metadata_csv_bytes(download_docs)
-                zip_bytes = create_images_zip_bytes(download_docs)
-                st.download_button("⬇️ Download metadata CSV", data=csv_bytes,
-                                   file_name=f"cattle_metadata_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv",
-                                   mime="text/csv")
-                st.download_button("⬇️ Download images ZIP", data=zip_bytes,
-                                   file_name=f"cattle_images_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip",
-                                   mime="application/zip")
-    except Exception as e:
-        st.error("Error querying DB.")
-        st.exception(e)
+    docs = list_cattle(filter_id=q_id.strip() or None, filter_name=q_name.strip() or None, limit=int(q_limit))
+    if not docs: st.info("No matching records.")
+    else:
+        st.write(f"Found {len(docs)} records (showing up to {q_limit}).")
+        rows = [{"12_digit_id": d.get("12_digit_id"), "cattle_name": d.get("cattle_name"), "class": d.get("class"), "created_at": d.get("created_at"), "n_images": len(d.get("images", []))} for d in docs]
+        st.dataframe(pd.DataFrame(rows))
+        ids = [d["12_digit_id"] for d in docs]
+        selected = st.multiselect("Select IDs to download", options=ids)
+        download_docs = [get_cattle_by_id(s) for s in selected] if selected else docs
+        if st.button("Prepare Download"):
+            st.download_button("⬇️ Download metadata CSV", data=create_metadata_csv_bytes(download_docs),
+                               file_name=f"cattle_metadata_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
+            st.download_button("⬇️ Download images ZIP", data=create_images_zip_bytes(download_docs),
+                               file_name=f"cattle_images_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip", mime="application/zip")
 
 # -----------------------------------------------------------------------------
-# UI: quick lookup by exact ID
+# UI: Quick Lookup by exact ID
 # -----------------------------------------------------------------------------
 st.header("🔎 Quick Lookup by ID")
 lookup_id = st.text_input("Enter exact 12-digit ID", key="lookup_exact")
 if st.button("Lookup"):
-    if not lookup_id:
-        st.error("Enter an ID to lookup.")
+    if not lookup_id: st.error("Enter an ID to lookup.")
     else:
-        try:
-            doc = get_cattle_by_id(lookup_id.strip())
-            if not doc:
-                st.warning("No cattle found with that ID.")
-            else:
-                st.write(f"**{doc['12_digit_id']} — {doc['cattle_name']}**")
-                st.write(f"Class: `{doc.get('class')}` — Created: {doc.get('created_at')}")
-                for img in doc.get("images", []):
-                    st.image(Image.open(io.BytesIO(from_b64(img["b64"]))), caption=img["filename"], use_column_width=True)
-                # downloads for this doc
-                st.download_button("⬇️ Download CSV (this cattle)", data=create_metadata_csv_bytes([doc]),
-                                   file_name=f"{lookup_id}_metadata.csv", mime="text/csv")
-                st.download_button("⬇️ Download ZIP (this cattle)", data=create_images_zip_bytes([doc]),
-                                   file_name=f"{lookup_id}_images.zip", mime="application/zip")
-        except Exception as e:
-            st.error("Lookup failed.")
-            st.exception(e)
+        doc = get_cattle_by_id(lookup_id.strip())
+        if not doc: st.warning("No cattle found with that ID.")
+        else:
+            st.write(f"**{doc['12_digit_id']} — {doc['cattle_name']}**")
+            st.write(f"Class: `{doc.get('class')}` — Created: {doc.get('created_at')}")
+            for img in doc.get("images", []):
+                st.image(Image.open(io.BytesIO(from_b64(img["b64"]))), caption=img["filename"], use_column_width=True)
+            st.download_button("⬇️ Download CSV (this cattle)", data=create_metadata_csv_bytes([doc]),
+                               file_name=f"{lookup_id}_metadata.csv", mime="text/csv")
+            st.download_button("⬇️ Download ZIP (this cattle)", data=create_images_zip_bytes([doc]),
+                               file_name=f"{lookup_id}_images.zip", mime="application/zip")
+
 
