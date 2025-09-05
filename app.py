@@ -647,6 +647,32 @@ with tabs[2]:
                                mime="application/zip")
 
 # -----------------------
+# # TAB 4: Quick Lookup
+# # -----------------------
+# with tabs[3]:
+#     st.header("🔎 Quick Lookup by ID")
+#     lookup_id = st.text_input("Enter exact 12-digit ID to view")
+#     if st.button("Lookup"):
+#         if not lookup_id:
+#             st.error("Enter an ID to lookup.")
+#         else:
+#             doc = get_cattle_by_id(lookup_id.strip())
+#             if not doc:
+#                 st.warning("No cattle found with that ID.")
+#             else:
+#                 st.write(f"**{doc['12_digit_id']} — {doc['cattle_name']}**")
+#                 st.write(f"Created at: {doc['created_at']}")
+#                 for img in doc.get("images", []):
+#                     raw = base64.b64decode(img["b64"])
+#                     st.image(Image.open(io.BytesIO(raw)), caption=img["filename"], use_column_width=True)
+#                 csv_bytes = create_metadata_csv_bytes([doc])
+#                 zip_bytes = create_images_zip_bytes([doc])
+#                 st.download_button("⬇️ Download CSV", data=csv_bytes,
+#                                    file_name=f"{lookup_id}_metadata.csv", mime="text/csv")
+#                 st.download_button("⬇️ Download ZIP", data=zip_bytes,
+#                                    file_name=f"{lookup_id}_images.zip", mime="application/zip")
+
+# -----------------------
 # TAB 4: Quick Lookup
 # -----------------------
 with tabs[3]:
@@ -662,15 +688,32 @@ with tabs[3]:
             else:
                 st.write(f"**{doc['12_digit_id']} — {doc['cattle_name']}**")
                 st.write(f"Created at: {doc['created_at']}")
+
                 for img in doc.get("images", []):
                     raw = base64.b64decode(img["b64"])
                     st.image(Image.open(io.BytesIO(raw)), caption=img["filename"], use_column_width=True)
+
+                # --- Prepare CSV and ZIP ---
                 csv_bytes = create_metadata_csv_bytes([doc])
-                zip_bytes = create_images_zip_bytes([doc])
-                st.download_button("⬇️ Download CSV", data=csv_bytes,
-                                   file_name=f"{lookup_id}_metadata.csv", mime="text/csv")
-                st.download_button("⬇️ Download ZIP", data=zip_bytes,
-                                   file_name=f"{lookup_id}_images.zip", mime="application/zip")
+                images_zip_bytes = create_images_zip_bytes([doc])
+
+                # --- Combine into one ZIP ---
+                combined_buf = io.BytesIO()
+                with zipfile.ZipFile(combined_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as z:
+                    z.writestr(f"{lookup_id}_metadata.csv", csv_bytes)
+                    # Merge all images into subfolder inside zip
+                    with zipfile.ZipFile(io.BytesIO(images_zip_bytes)) as img_zip:
+                        for name in img_zip.namelist():
+                            z.writestr(f"images/{name}", img_zip.read(name))
+                combined_buf.seek(0)
+
+                st.download_button(
+                    "⬇️ Download All (CSV + Images)",
+                    data=combined_buf,
+                    file_name=f"{lookup_id}_all.zip",
+                    mime="application/zip"
+                )
+
 
 
 
