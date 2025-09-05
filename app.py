@@ -549,7 +549,7 @@ with tabs[0]:
         class_name = model.names[class_id]
 
         if confidence < 0.90:
-            st.error("⚠️ Data not available in DB for reliable classification.")
+            st.error("⚠️ No Cow found in the existing database matching this muzzle picture")
         else:
             if confidence >= ui_threshold:
                 st.success(f"Predicted Class: **{class_name}** (Confidence: {confidence:.2f})")
