@@ -453,7 +453,7 @@ cattle_df = load_csv()
 # -----------------------
 # Load YOLOv11 classification model
 # -----------------------
-model = YOLO("./models/best_35.pt")
+model = YOLO("./models/best_new.pt")
 
 # -----------------------
 # Helpers: DB Operations
