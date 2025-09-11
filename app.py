@@ -528,7 +528,7 @@ def create_images_zip_bytes(docs):
 # -----------------------
 st.title("🐄 Livestock Management")
 
-tabs = st.tabs(["🔍 Classification", "➕ Register Cattle", "📂 Browse & Download", "🔎 Quick Lookup"])
+tabs = st.tabs(["🔍 Classification", "➕ Register Cattle", "📂 Browse & Download", "🔎 Quick Lookup", "🌐 CLIP Classification"])
 
 # -----------------------
 # TAB 1: Classification
@@ -772,6 +772,24 @@ with tabs[3]:
                     file_name=f"{lookup_id}_all.zip",
                     mime="application/zip"
                 )
+# -----------------------
+# TAB 4: External App
+# -----------------------
+with tabs[4]:
+    st.header("🌐 CLIP Muzzle Classification")
+    st.markdown(
+        """
+        <a href="https://muzzle-classification.replit.app/" target="_blank">
+            <button style="background-color: #4CAF50; color: white; 
+                           padding: 10px 20px; border: none; border-radius: 8px;
+                           cursor: pointer; font-size:16px;">
+                🚀 Open Muzzle Classification App
+            </button>
+        </a>
+        """,
+        unsafe_allow_html=True
+    )
+    st.info("This will open the muzzle-based classification app in a new tab.")
 
 
 
