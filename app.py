@@ -453,7 +453,7 @@ cattle_df = load_csv()
 # -----------------------
 # Load YOLOv11 classification model
 # -----------------------
-model = YOLO("./models/best_new.pt")
+# model = YOLO("./models/best_new.pt")
 
 # -----------------------
 # Helpers: DB Operations
@@ -532,35 +532,94 @@ tabs = st.tabs(["🔍 Classification", "➕ Register Cattle", "📂 Browse & Dow
 
 # -----------------------
 # TAB 1: Classification
+
+# -----------------------
+# Load Models
+# -----------------------
+roi_model = YOLO("./models/roi_best_200.pt")   # ROI detection model
+cls_model = YOLO("./models/best_25.pt")     # Classification model
+
+# -----------------------
+# TAB 0: Classification
 # -----------------------
 with tabs[0]:
-    st.header("🔍 Cattle Classification")
-    ui_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.01)
+    st.header("🔍 Cattle Classification with ROI Check")
+
+    ui_threshold = st.slider("Classification Confidence Threshold", 0.0, 1.0, 0.5, 0.01)
     uploaded_file = st.file_uploader("Upload an Image for Prediction", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
-        image = Image.open(uploaded_file)
+        image = Image.open(uploaded_file).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
-        results = model.predict(image)
-        top_result = results[0].probs
-        class_id = int(top_result.top1)
-        confidence = float(top_result.top1conf)
-        class_name = model.names[class_id]
-
-        if confidence < 0.90:
-            st.error("⚠️ No Cow found in the existing database matching this muzzle picture")
+        # --- Step 1: ROI detection ---
+        roi_results = roi_model.predict(image)
+        if not roi_results or len(roi_results[0].boxes) == 0:
+            st.warning("⚠️ Please upload a proper cow face image (no ROI detected).")
         else:
-            if confidence >= ui_threshold:
-                st.success(f"Predicted Class: **{class_name}** (Confidence: {confidence:.2f})")
-                row = cattle_df[cattle_df["class"] == class_name]
-                if not row.empty:
-                    st.write("📌 **The details of the Cow Identified are as below:**")
-                    st.table(row[["12_digit_id", "cattle_name", "class"]])
-                else:
-                    st.warning("⚠️ Predicted class not found in Database.")
+            # Get the highest confidence ROI
+            roi_box = max(roi_results[0].boxes, key=lambda b: b.conf)
+            roi_conf = float(roi_box.conf)
+
+            if roi_conf < 0.90:
+                st.warning("⚠️ Please upload a proper cow face image (ROI confidence < 0.90).")
             else:
-                st.warning("No prediction passed the selected confidence threshold.")
+                # Crop ROI region
+                x1, y1, x2, y2 = map(int, roi_box.xyxy[0].tolist())
+                roi_crop = image.crop((x1, y1, x2, y2))
+                st.image(roi_crop, caption=f"Detected ROI (Confidence: {roi_conf:.2f})", use_column_width=True)
+
+                # --- Step 2: Classification on ROI ---
+                results = cls_model.predict(roi_crop)
+                top_result = results[0].probs
+                class_id = int(top_result.top1)
+                confidence = float(top_result.top1conf)
+                class_name = cls_model.names[class_id]
+
+                if confidence < 0.90:
+                    st.error("⚠️ Data not available in DB for reliable classification.")
+                else:
+                    if confidence >= ui_threshold:
+                        st.success(f"Predicted Class: **{class_name}** (Confidence: {confidence:.2f})")
+                        row = cattle_df[cattle_df["class"] == class_name]
+                        if not row.empty:
+                            st.write("📌 **Mapped Result from CSV:**")
+                            st.table(row[["12_digit_id", "cattle_name", "class"]])
+                        else:
+                            st.warning("⚠️ Predicted class not found in CSV mapping.")
+                    else:
+                        st.warning("No prediction passed the selected confidence threshold.")
+
+
+# -----------------------tab0 old working----------------------------------
+# with tabs[0]:
+#     st.header("🔍 Cattle Classification")
+#     ui_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.01)
+#     uploaded_file = st.file_uploader("Upload an Image for Prediction", type=["jpg", "jpeg", "png"])
+
+#     if uploaded_file is not None:
+#         image = Image.open(uploaded_file)
+#         st.image(image, caption="Uploaded Image", use_column_width=True)
+
+#         results = model.predict(image)
+#         top_result = results[0].probs
+#         class_id = int(top_result.top1)
+#         confidence = float(top_result.top1conf)
+#         class_name = model.names[class_id]
+
+#         if confidence < 0.90:
+#             st.error("⚠️ No Cow found in the existing database matching this muzzle picture")
+#         else:
+#             if confidence >= ui_threshold:
+#                 st.success(f"Predicted Class: **{class_name}** (Confidence: {confidence:.2f})")
+#                 row = cattle_df[cattle_df["class"] == class_name]
+#                 if not row.empty:
+#                     st.write("📌 **The details of the Cow Identified are as below:**")
+#                     st.table(row[["12_digit_id", "cattle_name", "class"]])
+#                 else:
+#                     st.warning("⚠️ Predicted class not found in Database.")
+#             else:
+#                 st.warning("No prediction passed the selected confidence threshold.")
 
 # -----------------------
 # TAB 2: Register Cattle
