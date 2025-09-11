@@ -561,8 +561,8 @@ with tabs[0]:
             roi_box = max(roi_results[0].boxes, key=lambda b: b.conf)
             roi_conf = float(roi_box.conf)
 
-            if roi_conf < 0.80:
-                st.warning("⚠️ Please upload a proper cow face image (ROI confidence < 0.80).")
+            if roi_conf < 0.60:
+                st.warning("⚠️ Please upload a proper cow face image (ROI confidence < 0.60).")
             else:
                 # Crop ROI region
                 x1, y1, x2, y2 = map(int, roi_box.xyxy[0].tolist())
