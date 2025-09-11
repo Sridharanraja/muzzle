@@ -537,13 +537,13 @@ tabs = st.tabs(["🔍 Classification", "➕ Register Cattle", "📂 Browse & Dow
 # Load Models
 # -----------------------
 roi_model = YOLO("./models/roi_best_200.pt")   # ROI detection model
-cls_model = YOLO("./models/best_25.pt")     # Classification model
+cls_model = YOLO("./models/best_25_train8.pt")     # Classification model
 
 # -----------------------
 # TAB 0: Classification
 # -----------------------
 with tabs[0]:
-    st.header("🔍 Cattle Classification with ROI Check")
+    st.header("Cattle Classification")
 
     ui_threshold = st.slider("Classification Confidence Threshold", 0.0, 1.0, 0.5, 0.01)
     uploaded_file = st.file_uploader("Upload an Image for Prediction", type=["jpg", "jpeg", "png"])
