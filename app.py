@@ -624,39 +624,101 @@ with tabs[0]:
 # -----------------------
 # TAB 2: Register Cattle
 # -----------------------
+# TAB 1: Register Cattle
+# -----------------------
 with tabs[1]:
     st.header("➕ Register New Cattle")
-    with st.form("register_form", clear_on_submit=True):
-        cattle_id = st.text_input("Enter 12-digit Cattle ID (numbers only)")
-        cattle_name = st.text_input("Enter Cattle Name")
-        images = st.file_uploader("Upload at least 4 images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-        submitted = st.form_submit_button("Submit")
 
-        if submitted:
-            if not cattle_id:
-                st.error("⚠️ Please enter a 12-digit ID.")
-            elif not cattle_id.isdigit() or len(cattle_id) != 12:
-                st.error("⚠️ ID must be exactly 12 numeric digits.")
-            elif cattle_collection.find_one({"12_digit_id": cattle_id}):
-                st.error("⚠️ This ID already exists.")
-            elif not cattle_name:
-                st.error("⚠️ Please enter a cattle name.")
-            elif not images or len(images) < 1:
-                st.error("⚠️ Please upload at least 1 images.")
-            else:
-                try:
-                    doc = save_new_cattle(cattle_id, cattle_name, images)
-                except Exception as e:
-                    st.error(f"Error saving to DB: {e}")
-                else:
-                    st.success(f"✅ Registered {cattle_name} with ID {cattle_id}")
-                    st.write(f"- ID: `{doc['12_digit_id']}`")
-                    st.write(f"- Name: {doc['cattle_name']}")
-                    st.write(f"- Created at (UTC): {doc['created_at']}")
-                    st.write("**Uploaded Images Preview:**")
-                    for img in doc.get("images", []):
-                        raw = base64.b64decode(img["b64"])
-                        st.image(Image.open(io.BytesIO(raw)), caption=img["filename"], use_column_width=True)
+    lookup_id = st.text_input("Enter Unique 12-Digit ID")
+    cattle_name = st.text_input("Enter Cattle Name")
+    uploaded_images = st.file_uploader("Upload Cattle Images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+
+    if uploaded_images and lookup_id and cattle_name:
+        valid_images = []
+        invalid_images = []  # <-- store invalid ones
+
+        for uploaded_file in uploaded_images:
+            image = Image.open(uploaded_file).convert("RGB")
+
+            # --- Step 1: ROI validation ---
+            roi_results = roi_model.predict(image)
+            if not roi_results or len(roi_results[0].boxes) == 0:
+                invalid_images.append((uploaded_file.name, image, "No cow face detected"))
+                continue
+
+            # Pick highest confidence ROI
+            roi_box = max(roi_results[0].boxes, key=lambda b: b.conf)
+            roi_conf = float(roi_box.conf)
+
+            if roi_conf < 0.90:
+                invalid_images.append((uploaded_file.name, image, f"Low ROI confidence: {roi_conf:.2f}"))
+                continue
+
+            # Passed validation
+            valid_images.append((uploaded_file.name, image, roi_conf))
+
+        # --- Step 2: Show results ---
+        if valid_images:
+            st.subheader("✅ Valid Images")
+            for name, img, roi_conf in valid_images:
+                st.image(img, caption=f"{name} (ROI OK, Conf: {roi_conf:.2f})", use_column_width=True)
+
+        if invalid_images:
+            st.subheader("❌ Invalid Images")
+            for name, img, reason in invalid_images:
+                st.image(img, caption=f"{name} - {reason}", use_column_width=True)
+
+        # --- Step 3: Save only valid images ---
+        if valid_images:
+            if st.button("Register Cattle"):
+                # Extract just the images for saving
+                imgs_to_save = [img for _, img, _ in valid_images]
+
+                # Save to DB / Folder (implement your function)
+                save_cattle_data(lookup_id, cattle_name, imgs_to_save)
+
+                st.success(f"🎉 Cattle {cattle_name} ({lookup_id}) registered successfully with {len(valid_images)} valid images!")
+        else:
+            st.error("🚫 No valid images found. Please upload clear cow face pictures.")
+
+
+
+
+
+# ----------------------- working old------------------------
+# with tabs[1]:
+#     st.header("➕ Register New Cattle")
+#     with st.form("register_form", clear_on_submit=True):
+#         cattle_id = st.text_input("Enter 12-digit Cattle ID (numbers only)")
+#         cattle_name = st.text_input("Enter Cattle Name")
+#         images = st.file_uploader("Upload at least 4 images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+#         submitted = st.form_submit_button("Submit")
+
+#         if submitted:
+#             if not cattle_id:
+#                 st.error("⚠️ Please enter a 12-digit ID.")
+#             elif not cattle_id.isdigit() or len(cattle_id) != 12:
+#                 st.error("⚠️ ID must be exactly 12 numeric digits.")
+#             elif cattle_collection.find_one({"12_digit_id": cattle_id}):
+#                 st.error("⚠️ This ID already exists.")
+#             elif not cattle_name:
+#                 st.error("⚠️ Please enter a cattle name.")
+#             elif not images or len(images) < 1:
+#                 st.error("⚠️ Please upload at least 1 images.")
+#             else:
+#                 try:
+#                     doc = save_new_cattle(cattle_id, cattle_name, images)
+#                 except Exception as e:
+#                     st.error(f"Error saving to DB: {e}")
+#                 else:
+#                     st.success(f"✅ Registered {cattle_name} with ID {cattle_id}")
+#                     st.write(f"- ID: `{doc['12_digit_id']}`")
+#                     st.write(f"- Name: {doc['cattle_name']}")
+#                     st.write(f"- Created at (UTC): {doc['created_at']}")
+#                     st.write("**Uploaded Images Preview:**")
+#                     for img in doc.get("images", []):
+#                         raw = base64.b64decode(img["b64"])
+#                         st.image(Image.open(io.BytesIO(raw)), caption=img["filename"], use_column_width=True)
 
 # -----------------------
 # TAB 3: Browse & Download
