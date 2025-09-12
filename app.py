@@ -650,7 +650,7 @@ with tabs[1]:
             roi_box = max(roi_results[0].boxes, key=lambda b: b.conf)
             roi_conf = float(roi_box.conf)
 
-            if roi_conf < 0.90:
+            if roi_conf < 0.60:
                 invalid_images.append((uploaded_file.name, image, f"Low ROI confidence: {roi_conf:.2f}"))
                 continue
 
