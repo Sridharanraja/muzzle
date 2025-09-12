@@ -536,7 +536,7 @@ tabs = st.tabs(["🔍 Classification", "➕ Register Cattle", "📂 Browse & Dow
 # -----------------------
 # Load Models
 # -----------------------
-roi_model = YOLO("./models/roi_best_200.pt")   # ROI detection model
+roi_model = YOLO("./models/roi_best_500.pt")   # ROI detection model
 cls_model = YOLO("./models/best_25_train8.pt")     # Classification model
 
 # -----------------------
