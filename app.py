@@ -67,8 +67,8 @@ faiss_index_collection = db["faiss_index"]
 # -----------------------------------------------------------------------------
 @st.cache_data
 def load_csv():
-    if os.path.exists("./files/data.csv"):
-        df = pd.read_csv("./files/data.csv", dtype=str)
+    if os.path.exists("./file/data.csv"):
+        df = pd.read_csv("./file/data.csv", dtype=str)
         # Clean up the 12_digit_id column
         df["12_digit_id"] = (
             df["12_digit_id"]
