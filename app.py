@@ -704,8 +704,8 @@ with tabs[1]:
                             roi_bbox=[x1, y1, x2, y2]
                         )
                         
-                        st.success(f"✅ Classification Result Saved to MongoDB")
-                        st.info(f"Class: {class_name} | Confidence: {confidence:.2%}")
+                        # st.success(f"✅ Classification Result Saved to MongoDB")
+                        # st.info(f"Class: {class_name} | Confidence: {confidence:.2%}")
                         
                         # Also show classification results
                         if confidence >= ui_threshold:
