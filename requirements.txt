@@ -4,3 +4,8 @@ pillow
 pymongo
 pandas
 git+https://github.com/openai/CLIP.git
+faiss-cpu
+clip
+ftfy
+regex
+tqdm
