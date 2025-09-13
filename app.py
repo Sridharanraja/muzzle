@@ -696,13 +696,13 @@ with tabs[1]:
                         uploaded_file.seek(0)  # Reset for later use
                         
                         # Save YOLO result to MongoDB
-                        save_yolo_result(
-                            image_id=image_id,
-                            roi_conf=roi_conf,
-                            class_name=class_name,
-                            confidence=confidence,
-                            roi_bbox=[x1, y1, x2, y2]
-                        )
+                        # save_yolo_result(
+                        #     image_id=image_id,
+                        #     roi_conf=roi_conf,
+                        #     class_name=class_name,
+                        #     confidence=confidence,
+                        #     roi_bbox=[x1, y1, x2, y2]
+                        # )
                         
                         # st.success(f"✅ Classification Result Saved to MongoDB")
                         # st.info(f"Class: {class_name} | Confidence: {confidence:.2%}")
@@ -831,7 +831,8 @@ with tabs[2]:
                     
                     # Display invalid images
                     if invalid_images:
-                        st.error(f"❌ {len(invalid_images)} Invalid Image(s)")
+                        st.error(f"❌ {len(invalid_images)} Invalid Image(s) - These will NOT be saved")
+                        st.warning("⚠️ Invalid images will not be uploaded to the database. Please upload different images with clear cattle muzzle visible.")
                         invalid_cols = st.columns(min(len(invalid_images), 3))
                         for idx, (name, reason, img) in enumerate(invalid_images):
                             with invalid_cols[idx % 3]:
@@ -852,8 +853,8 @@ with tabs[2]:
                         # Normalize the average embedding
                         avg_embedding = avg_embedding / np.linalg.norm(avg_embedding, axis=1, keepdims=True)
 
-                        # Save to MongoDB
-                        doc = save_new_cattle_to_db(cattle_id, cattle_name, cattle_class, ref_files, avg_embedding)
+                        # Save to MongoDB (only valid images from img_paths)
+                        doc = save_new_cattle_to_db(cattle_id, cattle_name, cattle_class, img_paths, avg_embedding)
                         if doc:
                             st.success(f"✅ Successfully registered {cattle_name} ({cattle_class}) with ID {cattle_id}")
                             # Display uploaded images from DB
@@ -884,7 +885,7 @@ with tabs[2]:
                         else:
                             st.error("❌ Failed to save registration data")
                     else:
-                        st.error("❌ Failed to process any images")
+                        st.error("❌ No valid images found. Please upload different images with clear cattle muzzle visible.")
                         
                 except Exception as e:
                     st.error(f"❌ Registration failed: {str(e)}")
