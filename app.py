@@ -185,8 +185,15 @@ def show_images_with_captions(img_paths, title="Reference Image", from_db=False)
             if isinstance(img_paths, list):
                 for i, img_data in enumerate(img_paths):
                     if isinstance(img_data, dict) and 'b64' in img_data:
-                        raw = base64.b64decode(img_data['b64'])
-                        st.image(Image.open(io.BytesIO(raw)), caption=img_data.get('filename', f'Ref {i+1}'), width=120)
+                        try:
+                            raw = base64.b64decode(img_data['b64'])
+                            if len(raw) > 0:
+                                st.image(Image.open(io.BytesIO(raw)), caption=img_data.get('filename', f'Ref {i+1}'), width=120)
+                            else:
+                                st.error(f"❌ Empty image data: {img_data.get('filename', f'Ref {i+1}')}")
+                        except Exception as e:
+                            st.error(f"❌ Invalid image: {img_data.get('filename', f'Ref {i+1}')} - {str(e)[:50]}")
+                            continue
             return
         
         # Handle file paths (existing functionality)
@@ -1014,9 +1021,17 @@ with tabs[5]:
                             for idx, img_data in enumerate(current_images):
                                 with cols[idx % 3]:
                                     if img_data.get("b64"):
-                                        img_bytes = base64.b64decode(img_data["b64"])
-                                        img = Image.open(io.BytesIO(img_bytes))
-                                        st.image(img, caption=img_data.get("filename", f"Image {idx+1}"), use_column_width=True)
+                                        try:
+                                            img_bytes = base64.b64decode(img_data["b64"])
+                                            if len(img_bytes) > 0:
+                                                img = Image.open(io.BytesIO(img_bytes))
+                                                st.image(img, caption=img_data.get("filename", f"Image {idx+1}"), use_column_width=True)
+                                            else:
+                                                st.error(f"❌ Empty image data: {img_data.get('filename', f'Image {idx+1}')}")
+                                                continue
+                                        except Exception as e:
+                                            st.error(f"❌ Invalid image: {img_data.get('filename', f'Image {idx+1}')} - {str(e)[:50]}")
+                                            continue
                                         if st.button(f"🗑️ Remove", key=f"remove_img_{cattle_id}_{idx}"):
                                             if delete_cattle_image_from_db(cattle_id, img_data["filename"]):
                                                 st.success("✅ Image removed")
@@ -1070,8 +1085,13 @@ with tabs[5]:
                                             if updated_doc and "images" in updated_doc:
                                                 for img_data in updated_doc["images"]:
                                                     if img_data.get("b64"):
-                                                        img_bytes = base64.b64decode(img_data["b64"])
-                                                        img = Image.open(io.BytesIO(img_bytes))
+                                                        try:
+                                                            img_bytes = base64.b64decode(img_data["b64"])
+                                                            if len(img_bytes) > 0:
+                                                                img = Image.open(io.BytesIO(img_bytes))
+                                                        except Exception as e:
+                                                            st.warning(f"Skipping corrupted image: {img_data.get('filename', 'unknown')}")
+                                                            continue
                                                         all_images.append(img)
                                             
                                             if all_images:
@@ -1332,9 +1352,14 @@ with tabs[6]:
                                     images = []
                                     for img_data in doc["images"]:
                                         if img_data.get("b64"):
-                                            img_bytes = base64.b64decode(img_data["b64"])
-                                            img = Image.open(io.BytesIO(img_bytes))
-                                            images.append(img)
+                                            try:
+                                                img_bytes = base64.b64decode(img_data["b64"])
+                                                if len(img_bytes) > 0:
+                                                    img = Image.open(io.BytesIO(img_bytes))
+                                                    images.append(img)
+                                            except Exception as e:
+                                                st.warning(f"Skipping corrupted image in record {doc['12_digit_id']}")
+                                                continue
                                     
                                     if images:
                                         # Calculate embeddings for all images
