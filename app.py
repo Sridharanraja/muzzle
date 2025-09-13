@@ -222,21 +222,31 @@ def save_new_cattle_to_db(cattle_id: str, cattle_name: str, cattle_class: str, i
     image_entries = []
     
     for i, f in enumerate(image_files, start=1):
-        if hasattr(f, 'read'):
-            # File upload object
-            raw = f.read()
-            f.seek(0)  # Reset file pointer
-            ext = os.path.splitext(f.name)[1] or ".jpg"
-        else:
-            # PIL Image object
-            buf = io.BytesIO()
-            f.save(buf, format='JPEG')
-            raw = buf.getvalue()
-            ext = ".jpg"
-        
-        b64 = base64.b64encode(raw).decode("utf-8")
-        filename = f"{cattle_id}_{i}{ext}"
-        image_entries.append({"filename": filename, "b64": b64})
+        try:
+            if hasattr(f, 'read'):
+                # File upload object
+                f.seek(0)  # Reset file pointer FIRST
+                raw = f.read()
+                if len(raw) == 0:
+                    st.error(f"Warning: File {getattr(f, 'name', 'unknown')} is empty")
+                    continue
+                ext = os.path.splitext(getattr(f, 'name', 'image'))[1] or ".jpg"
+            else:
+                # PIL Image object
+                buf = io.BytesIO()
+                f.save(buf, format='JPEG')
+                raw = buf.getvalue()
+                if len(raw) == 0:
+                    st.error(f"Warning: Could not convert PIL image to bytes")
+                    continue
+                ext = ".jpg"
+            
+            b64 = base64.b64encode(raw).decode("utf-8")
+            filename = f"{cattle_id}_{i}{ext}"
+            image_entries.append({"filename": filename, "b64": b64})
+        except Exception as e:
+            st.error(f"Error processing image {i}: {str(e)}")
+            continue
 
     doc = {
         "12_digit_id": cattle_id,
@@ -322,19 +332,29 @@ def add_cattle_images_to_db(cattle_id: str, new_images):
         # Process new images
         image_entries = []
         for i, f in enumerate(new_images, start=start_idx):
-            if hasattr(f, 'read'):
-                raw = f.read()
-                f.seek(0)
-                ext = os.path.splitext(f.name)[1] or ".jpg"
-            else:
-                buf = io.BytesIO()
-                f.save(buf, format='JPEG')
-                raw = buf.getvalue()
-                ext = ".jpg"
-            
-            b64 = base64.b64encode(raw).decode("utf-8")
-            filename = f"{cattle_id}_{i}{ext}"
-            image_entries.append({"filename": filename, "b64": b64})
+            try:
+                if hasattr(f, 'read'):
+                    f.seek(0)  # Reset file pointer FIRST
+                    raw = f.read()
+                    if len(raw) == 0:
+                        st.error(f"Warning: File {getattr(f, 'name', 'unknown')} is empty")
+                        continue
+                    ext = os.path.splitext(getattr(f, 'name', 'image'))[1] or ".jpg"
+                else:
+                    buf = io.BytesIO()
+                    f.save(buf, format='JPEG')
+                    raw = buf.getvalue()
+                    if len(raw) == 0:
+                        st.error(f"Warning: Could not convert PIL image to bytes")
+                        continue
+                    ext = ".jpg"
+                
+                b64 = base64.b64encode(raw).decode("utf-8")
+                filename = f"{cattle_id}_{i}{ext}"
+                image_entries.append({"filename": filename, "b64": b64})
+            except Exception as e:
+                st.error(f"Error processing additional image {i}: {str(e)}")
+                continue
         
         # Add new images to database
         result = cattle_collection.update_one(
@@ -1089,10 +1109,10 @@ with tabs[5]:
                                                             img_bytes = base64.b64decode(img_data["b64"])
                                                             if len(img_bytes) > 0:
                                                                 img = Image.open(io.BytesIO(img_bytes))
+                                                                all_images.append(img)
                                                         except Exception as e:
                                                             st.warning(f"Skipping corrupted image: {img_data.get('filename', 'unknown')}")
                                                             continue
-                                                        all_images.append(img)
                                             
                                             if all_images:
                                                 # Re-calculate embeddings for all images
