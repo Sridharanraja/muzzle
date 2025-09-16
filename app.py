@@ -116,7 +116,7 @@ def load_yolo_models():
     if not YOLO_AVAILABLE:
         return None, None
     try:
-        roi_model = YOLO("./models/roi_best_600.pt")   # ROI detection model
+        roi_model = YOLO("./models/roi_best_600.pt")   # ROI detection model new  
         cls_model = YOLO("./models/best_25_train8.pt")  # Classification model
         return roi_model, cls_model
     except Exception as e:
